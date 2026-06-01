@@ -1,5 +1,6 @@
 """
 Document verification and fraud detection service using Tesseract OCR
+Supports both image files (JPG, PNG) and PDF documents
 """
 
 import pytesseract
@@ -9,6 +10,12 @@ import numpy as np
 import re
 from io import BytesIO
 from django.core.files.uploadedfile import UploadedFile
+
+try:
+    import pdf2image
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
 
 
 class DocumentVerificationService:
@@ -29,16 +36,93 @@ class DocumentVerificationService:
         'counterfeit', 'unauthorized', 'revoked'
     ]
     
+    # Supported file types
+    SUPPORTED_IMAGE_TYPES = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff'}
+    SUPPORTED_DOCUMENT_TYPES = {'.pdf'}
+    
     def __init__(self):
         """Initialize the verification service"""
         pass
     
-    def extract_text_from_image(self, image_file: UploadedFile) -> dict:
+    def _get_file_extension(self, filename: str) -> str:
+        """Get file extension from filename"""
+        return '.' + filename.split('.')[-1].lower() if '.' in filename else ''
+    
+    def _is_image_file(self, filename: str) -> bool:
+        """Check if file is an image"""
+        return self._get_file_extension(filename) in self.SUPPORTED_IMAGE_TYPES
+    
+    def _is_pdf_file(self, filename: str) -> bool:
+        """Check if file is a PDF"""
+        return self._get_file_extension(filename) in self.SUPPORTED_DOCUMENT_TYPES
+    
+    def _convert_pdf_to_images(self, pdf_file: UploadedFile) -> dict:
         """
-        Extract text from an uploaded document image using Tesseract OCR
+        Convert PDF to images
         
         Args:
-            image_file: Django UploadedFile object
+            pdf_file: Django UploadedFile object (PDF)
+            
+        Returns:
+            Dictionary with images list and metadata
+        """
+        if not PDF_SUPPORT:
+            return {
+                'success': False,
+                'images': [],
+                'error': 'pdf2image library not installed. Run: pip install pdf2image'
+            }
+        
+        try:
+            # Convert PDF to images (one image per page)
+            images = pdf2image.convert_from_bytes(pdf_file.read())
+            
+            return {
+                'success': True,
+                'images': images,
+                'page_count': len(images),
+                'error': None
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'images': [],
+                'error': f'Failed to convert PDF: {str(e)}'
+            }
+    
+    def extract_text_from_file(self, file_obj: UploadedFile) -> dict:
+        """
+        Extract text from either image or PDF file
+        
+        Args:
+            file_obj: Django UploadedFile object
+            
+        Returns:
+            Dictionary with extracted text and metadata
+        """
+        filename = file_obj.name
+        file_ext = self._get_file_extension(filename)
+        
+        # Check file type
+        if self._is_pdf_file(filename):
+            return self._extract_text_from_pdf(file_obj)
+        elif self._is_image_file(filename):
+            return self._extract_text_from_image(file_obj)
+        else:
+            return {
+                'success': False,
+                'extracted_text': None,
+                'confidence_score': 0,
+                'file_type': 'unsupported',
+                'error': f'Unsupported file type: {file_ext}. Supported: {self.SUPPORTED_IMAGE_TYPES | self.SUPPORTED_DOCUMENT_TYPES}'
+            }
+    
+    def _extract_text_from_image(self, image_file: UploadedFile) -> dict:
+        """
+        Extract text from an image file using Tesseract OCR
+        
+        Args:
+            image_file: Django UploadedFile object (image)
             
         Returns:
             Dictionary with extracted text and metadata
@@ -61,6 +145,8 @@ class DocumentVerificationService:
                 'success': True,
                 'extracted_text': extracted_text,
                 'confidence_score': round(confidence, 2),
+                'file_type': 'image',
+                'page_count': 1,
                 'error': None
             }
         except Exception as e:
@@ -68,6 +154,68 @@ class DocumentVerificationService:
                 'success': False,
                 'extracted_text': None,
                 'confidence_score': 0,
+                'file_type': 'image',
+                'error': str(e)
+            }
+    
+    def _extract_text_from_pdf(self, pdf_file: UploadedFile) -> dict:
+        """
+        Extract text from a PDF file
+        
+        Args:
+            pdf_file: Django UploadedFile object (PDF)
+            
+        Returns:
+            Dictionary with extracted text and metadata
+        """
+        try:
+            # Convert PDF to images
+            conversion_result = self._convert_pdf_to_images(pdf_file)
+            
+            if not conversion_result['success']:
+                return {
+                    'success': False,
+                    'extracted_text': None,
+                    'confidence_score': 0,
+                    'file_type': 'pdf',
+                    'error': conversion_result['error']
+                }
+            
+            images = conversion_result['images']
+            all_text = []
+            confidence_scores = []
+            
+            # Extract text from each page
+            for page_num, img in enumerate(images):
+                # Preprocess image
+                processed_img = self._preprocess_image(img)
+                
+                # Extract text
+                text = pytesseract.image_to_string(processed_img)
+                all_text.append(text)
+                
+                # Get confidence
+                data = pytesseract.image_to_data(processed_img, output_type=pytesseract.Output.DICT)
+                page_confidence = np.mean([int(conf) for conf in data['conf'] if int(conf) > 0])
+                confidence_scores.append(page_confidence)
+            
+            # Calculate average confidence
+            avg_confidence = round(np.mean(confidence_scores), 2) if confidence_scores else 0
+            
+            return {
+                'success': True,
+                'extracted_text': '\n---PAGE BREAK---\n'.join(all_text),
+                'confidence_score': avg_confidence,
+                'file_type': 'pdf',
+                'page_count': len(images),
+                'error': None
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'extracted_text': None,
+                'confidence_score': 0,
+                'file_type': 'pdf',
                 'error': str(e)
             }
     
@@ -218,7 +366,7 @@ class DocumentVerificationService:
         multiple_spaces = len(re.findall(r'\s{2,}', text))
         return multiple_spaces > 5
     
-    def extract_Ghana_card_fields(self, text: str) -> dict:
+    def extract_ghana_card_fields(self, text: str) -> dict:
         """
         Extract common fields from Ghana Card document
         
@@ -259,29 +407,32 @@ class DocumentVerificationService:
         
         return fields
     
-    def verify_document_complete(self, image_file: UploadedFile, expected_ghana_card: str = None) -> dict:
+    def verify_document_complete(self, file_obj: UploadedFile, expected_ghana_card: str = None) -> dict:
         """
-        Complete document verification workflow
+        Complete document verification workflow (works with images and PDFs)
         
         Args:
-            image_file: Document image file
+            file_obj: Document file (image or PDF)
             expected_ghana_card: Expected Ghana Card number (optional, for cross-validation)
             
         Returns:
             Comprehensive verification result
         """
-        # Step 1: Extract text
-        extraction_result = self.extract_text_from_image(image_file)
+        # Step 1: Extract text (handles both images and PDFs)
+        extraction_result = self.extract_text_from_file(file_obj)
         
         if not extraction_result['success']:
             return {
                 'verification_status': 'FAILED',
                 'reason': extraction_result['error'],
+                'file_type': extraction_result.get('file_type'),
                 'details': {}
             }
         
         extracted_text = extraction_result['extracted_text']
         confidence_score = extraction_result['confidence_score']
+        file_type = extraction_result.get('file_type')
+        page_count = extraction_result.get('page_count', 1)
         
         # Step 2: Validate Ghana Card format
         ghana_card_validation = self.validate_ghana_card(extracted_text)
@@ -290,7 +441,7 @@ class DocumentVerificationService:
         fraud_detection = self.detect_fraud_indicators(extracted_text, confidence_score)
         
         # Step 4: Extract fields
-        extracted_fields = self.extract_Ghana_card_fields(extracted_text)
+        extracted_fields = self.extract_ghana_card_fields(extracted_text)
         
         # Step 5: Cross-validate with expected Ghana Card if provided
         cross_validation = True
@@ -301,6 +452,8 @@ class DocumentVerificationService:
             'verification_status': 'PASS' if (ghana_card_validation['valid'] and 
                                               fraud_detection['risk_level'] == 'LOW' and 
                                               cross_validation) else 'FAIL',
+            'file_type': file_type,
+            'page_count': page_count,
             'ocr_confidence': confidence_score,
             'ghana_card_validation': ghana_card_validation,
             'fraud_detection': fraud_detection,

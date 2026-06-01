@@ -20,4 +20,8 @@ urlpatterns = [
     path('applications/filter/', views.getApplicationsByStatus, name='get_applications_by_status'),
     path('applications/<uuid:application_id>/review/history/', views.getReviewHistory, name='get_review_history'),
     path('applications/stats/', views.getApprovalStats, name='get_approval_stats'),
+    
+    # Document Verification & Fraud Detection endpoints
+    path('applications/<uuid:application_id>/documents/', views.getDocumentsForApplication, name='get_documents_for_application'),
+    path('documents/<uuid:document_id>/analyze/', views.analyzeSingleDocument, name='analyze_single_document'),
 ]

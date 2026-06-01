@@ -214,11 +214,12 @@ class ApplicationDocument(models.Model):
             'document_type': self.document_type,
             'file_url': self.file.url,
             'status': self.status, 
-            'created_at': self.ceated_at, 
+            'created_at': self.created_at, 
             'updated_at': self.updated_at,
         }
 
     
+
 
 
 class Loan(models.Model):
@@ -270,7 +271,7 @@ class Loan(models.Model):
 class LoanPayment(models.Model):
     id = models.UUIDField(primary_key=True, unique=True, default=uuid.uuid4)
     loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name="loan_payments")
-    student = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name='student_payments')
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='student_payments')
     amount = models.FloatField(default=0) #this is the amount paid by the student
     payment_method = models.TextField(max_length=50)
     status = models.CharField(blank=True, null=False, max_length=255) #whether the payment is pending, failed, or confirmed.
@@ -293,11 +294,10 @@ class LoanPayment(models.Model):
 
 
 
-
 class Notification(models.Model):
 
     TYPE_CHOICES = [
-        ('sucess', 'Success'),
+        ('success', 'Success'),
         ('info', 'Info'),
         ('reminder', 'Reminder'), 
         ('warning', 'Warning')
@@ -320,4 +320,41 @@ class Notification(models.Model):
             'type': self.notification_type, 
             'is_read': self.is_read, 
             'created_at': self.created_at
+        }
+
+
+# ============ LOAN APPROVAL WORKFLOW MODELS (SIMPLIFIED) ============
+
+class LoanReview(models.Model):
+    """Simple loan application review and approval workflow"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    id = models.UUIDField(primary_key=True, unique=True, default=uuid.uuid4)
+    application = models.OneToOneField(LoanApplication, on_delete=models.CASCADE, related_name='review')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='loan_reviews')
+    comments = models.TextField(blank=True)
+    approved_amount = models.FloatField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Review for {self.application.id} - {self.status}"
+
+    def toMap(self):
+        return {
+            'id': str(self.id),
+            'application_id': str(self.application.id),
+            'status': self.status,
+            'reviewed_by': self.reviewed_by.username if self.reviewed_by else None,
+            'comments': self.comments,
+            'approved_amount': self.approved_amount,
+            'rejection_reason': self.rejection_reason,
+            'reviewed_at': self.reviewed_at,
         }

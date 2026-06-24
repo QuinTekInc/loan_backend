@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.status import *
 from django.contrib.auth import authenticate
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.utils import timezone
 
@@ -22,17 +23,21 @@ def loginAdmin(request):
 
     if user is None:
         return Response({'message': 'Incorrect username or password'}, status=HTTP_404_NOT_FOUND)
+
     
-
+    token, _  = Token.objects.get_or_create(user=user)
+    
     #todo: build the user data here.
+    response_map = user_object_toMap(user)
+    response_map['token'] = token.key
 
-    return Response({'message': 'User login successful'})
+    return Response(response_map)
 
 
 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated, IsAdminUser])
+@permission_classes([IsAuthenticated])
 def getLoanApplications(request):
     applications = LoanApplication.objects.all()
     return Response([application.toMap() for application in applications])
@@ -437,3 +442,44 @@ def getDocumentsForApplication(request, application_id):
         }, status=HTTP_200_OK)
     except Exception as e:
         return Response({'error': str(e)}, status=HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def getUsers(request):
+
+    current_user: User = request.user;
+
+    if not current_user.is_superuser:
+        return Response({'message': 'Out of bounds'}, status=HTTP_401_UNAUTHORIZED)
+
+    users = User.objects.all()
+
+    users_map_list = list(map(user_object_toMap, users))
+
+    return Response(users_map_list)
+
+
+def user_object_toMap(user: User):
+
+    user_role = 'admin'
+
+    if user.is_superuser:
+        user_role = 'superuser'
+    elif Student.objects.filter(user=user).exists():
+        user_role = 'student'
+
+    user_map = {
+        'username': user.username,
+        'first_name': user.first_name, 
+        'last_name': user.last_name, 
+        'email': user.email, 
+        'role': user_role, 
+        'status': 'active' if user.is_active else 'suspended'
+    }
+
+    return user_map

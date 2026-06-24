@@ -121,6 +121,8 @@ class LoanApplication(models.Model):
     def toMap(self):
         return {
             'id': str(self.id),
+            'student_id': str(self.student.id),
+            'student_name': str(self.student.user.last_name) + " " + str(self.student.user.first_name),
             'amount_requested': self.amount_requested, 
             'loan_reason': self.loan_reason,
             'status': self.status,

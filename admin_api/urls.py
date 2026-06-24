@@ -24,4 +24,9 @@ urlpatterns = [
     # Document Verification & Fraud Detection endpoints
     path('applications/<uuid:application_id>/documents/', views.getDocumentsForApplication, name='get_documents_for_application'),
     path('documents/<uuid:document_id>/analyze/', views.analyzeSingleDocument, name='analyze_single_document'),
+
+
+    #user management endpoints
+    path('get-users/', views.getUsers),
+    path('update-user/', views.getUsers)
 ]

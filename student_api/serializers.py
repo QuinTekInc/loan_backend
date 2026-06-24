@@ -102,6 +102,9 @@ class LoanApplicationSerializer(serializers.Serializer):
                     file=file
                 )
 
+            #create a loan review object for the application
+            LoanReview.objects.create(application=application)
+
         return application
     
 

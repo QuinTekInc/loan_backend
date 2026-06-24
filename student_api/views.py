@@ -85,7 +85,7 @@ def signupStudent(request):
 
     required_fields_values = [username, password, full_name, email, ghana_card_number, phone_number]
 
-
+    
     profile_picture = request.FILES.get('profile_picture', None)
 
     if None in required_fields_values:
@@ -130,7 +130,7 @@ def signupStudent(request):
                 gender=gender
             )
 
-            if profile_picture is not None: 
+            if profile_picture: 
                 student.profile_picture = profile_picture
                 student.save()
                 student.refresh_from_db()

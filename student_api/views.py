@@ -319,12 +319,9 @@ def getDashboardData(request):
     user = request.user
     student = Student.objects.get(user=user)
 
-
-    print(f'[GET DASHBOARD] Student Name -> {student.user.last_name}')
-
     loan_applications = LoanApplication.objects.filter(student=student)
 
-    loans = Loan.objects.filter(student=student, payment_status='active')
+    loans = Loan.objects.filter(student=student, loan_status='active')
 
     total_loan_amount = sum([loan.approved_amount for loan in loans])
 

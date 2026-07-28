@@ -1,5 +1,6 @@
 
 from django.db import models
+from django.db.models import Sum
 from django.contrib.auth.models import User
 import django.utils.timezone
 import uuid
@@ -58,12 +59,15 @@ class Student(models.Model):
     
     def __str__(self):
         return str(self.__repr__())
+    
+    def get_fullName(self):
+        return f'{self.user.last_name} {self.user.first_name}'
 
 
     def toMap(self):
         return {
             'id': str(self.id),
-            'name': f'{self.user.last_name} {self.user.first_name}',
+            'name': self.get_fullName(),
             'email': self.user.email,
             'ghana_card_number': self.ghana_card_number, 
             'phone_number': self.phone_number,   
@@ -75,6 +79,7 @@ class Student(models.Model):
 #if accounts are succesfully verified, 
 #their corresponding verification object is deleted from this table
 class AccountVerification(models.Model):
+
     id = models.UUIDField(primary_key=True, unique=True, default=uuid.uuid4, null=False, blank=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=False)
     code = models.CharField(max_length=10, blank=False, null=False)
@@ -127,11 +132,12 @@ class LoanApplication(models.Model):
             'loan_reason': self.loan_reason,
             'status': self.status,
             'current_step': self.current_step,
-            'created_at': self.created_at, 
-            'updated_at': self.updated_at,
+            'created_at': str(self.created_at), 
+            'updated_at': str(self.updated_at),
         }
 
 
+#supplimentary information to the student application
 class StudentApplicationInfo(models.Model):
 
     GENDER_CHOICES = [
@@ -216,8 +222,8 @@ class ApplicationDocument(models.Model):
             'document_type': self.document_type,
             'file_url': self.file.url,
             'status': self.status, 
-            'created_at': self.created_at, 
-            'updated_at': self.updated_at,
+            'created_at': str(self.created_at), 
+            'updated_at': str(self.updated_at),
         }
 
     
@@ -227,26 +233,22 @@ class ApplicationDocument(models.Model):
 class Loan(models.Model):
 
     LOAN_STATUS_CHOICES = [
-        ('awaiting_disbursement', 'Awaiting Disbursement'),
-        ('cancelled', 'Cancelled'),
-        ("disbursed", "Funds Disbursed"),
-    ]
-
-    PAYMENT_STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('completed', 'Completed')
+        ('awaiting_disbursement', 'Awaiting Disbursement'), #loan has been approved, and is awaiting disbursement
+        ('disbursed', 'Disbursed'), #When the loan amount has been disbursed to the user
+        ('active', 'Active'), #when the loan now becomes active [that is when the user starts paying].
+        ('completed', 'completed'), #when the user finished paying their loans
+        ('cancelled', 'Cancelled'), #when the loan get's cancelled
     ]
 
 
     id = models.UUIDField(primary_key=True, unique=True, default=uuid.uuid4)
     application = models.ForeignKey(LoanApplication, on_delete=models.CASCADE, related_name='loan')
-    issuer = models.ForeignKey(Issuer, on_delete=models.CASCADE)
+    issuer = models.ForeignKey(User, on_delete=models.CASCADE)
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='loan')
     approved_amount = models.FloatField(default=0)
     interest_rate = models.FloatField(default=0)
     duration = models.IntegerField(default=0)
     loan_status = models.CharField(max_length=50, blank=True, choices=LOAN_STATUS_CHOICES)
-    payment_status = models.CharField(max_length=50, blank=True, choices=PAYMENT_STATUS_CHOICES)
     start_date = models.DateTimeField(null=True)
     end_date = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -254,19 +256,29 @@ class Loan(models.Model):
 
 
     def toMap(self):
+
+        total_amount = self.approved_amount + (self.approved_amount * self.interest_rate)
+
+        total_amount_paid = (LoanPayment.objects
+                             .filter(loan=self).aggregate(total=Sum('amount'))['total']) or 0
+
+        print('TOTAL_AMOUNT_PAID: ', total_amount_paid)
+
         return {
             'id': str(self.id),
             'application_id': str(self.application.id),
             'student_id': str(self.student.id),
+            'student_name': self.student.get_fullName(),
             'approved_amount': self.approved_amount, 
             'interest_rate': self.interest_rate, 
+            'total_amount': total_amount,
+            'amount_paid': total_amount_paid,
             'duration': self.duration, 
             'loan_status': self.loan_status,
-            'payment_status': self.payment_status,
-            'start_date': self.start_date, 
-            'end_date': self.end_date, 
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'start_date': str(self.start_date), 
+            'end_date': str(self.end_date), 
+            'created_at': str(self.created_at),
+            'updated_at': str(self.updated_at),
         }
 
 
@@ -276,6 +288,7 @@ class LoanPayment(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='student_payments')
     amount = models.FloatField(default=0) #this is the amount paid by the student
     payment_method = models.TextField(max_length=50)
+    notes = models.TextField(default='')
     status = models.CharField(blank=True, null=False, max_length=255) #whether the payment is pending, failed, or confirmed.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -289,8 +302,8 @@ class LoanPayment(models.Model):
             'amount': self.amount, 
             'payment_method': self.payment_method, 
             'status': self.status, 
-            'created_at': self.created_at, 
-            'updated_at': self.updated_at
+            'created_at': str(self.created_at), 
+            'updated_at': str(self.updated_at)
         }
 
 
@@ -319,9 +332,9 @@ class Notification(models.Model):
             'id': str(self.id),
             'title': self.title, 
             'message': self.message,
-            'type': self.notification_type, 
+            'notification_type': self.notification_type, 
             'is_read': self.is_read, 
-            'created_at': self.created_at
+            'created_at': str(self.created_at)
         }
 
 
@@ -358,5 +371,30 @@ class LoanReview(models.Model):
             'comments': self.comments,
             'approved_amount': self.approved_amount,
             'rejection_reason': self.rejection_reason,
-            'reviewed_at': self.reviewed_at,
+            'reviewed_at': str(self.reviewed_at),
+        }
+
+
+
+class AuditLog(models.Model):
+    id = models.UUIDField(primary_key=True, unique=True, default=uuid.uuid4)
+    actor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_logs')
+    target_model = models.CharField(max_length=255)
+    target_id = models.CharField(max_length=255)
+    action = models.CharField(max_length=255)
+    description = models.TextField()
+    affected_user = models.ForeignKey(User, on_delete=models.CASCADE,)
+    created_at = models.DateTimeField()
+
+
+    def toMap(self):
+        return {
+            'id': str(self.id),
+            'actor': self.actor.username, 
+            'action': self.action,
+            'description': self.description, 
+            'target_model': self.target_model, 
+            'target_id': self.target_id,
+            'affected_user': self.affected_user.username, 
+            'created_at': str(self.created_at) 
         }

@@ -1,6 +1,10 @@
 
 
-import requests
-
-def verify_ghana_card(ghana_card_number, student_name) -> bool:
-    return False
+class LogActionType:
+    CREATE_USER = 'CREATE_USER'
+    CHANGE_USER_ROLE = 'CHANGE_USER_ROLE'
+    CHANGE_USER_STATUS = 'CHANGE_USER_STATUS'
+    CHANGE_LOAN_STATUS = 'CHANGE_LOAN_STATUS'
+    LOAN_APPROVAL = 'LOAN_APPROVAL'
+    LOAN_REJECTION = 'LOAN_REJECTION'
+    

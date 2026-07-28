@@ -25,10 +25,13 @@ SECRET_KEY = 'django-insecure-=-62w$k8uq%a2n%xog+!u#8%z6532ofer@p1#b5!$z*=ec!k53
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+
 ALLOWED_HOSTS = []
 
 
 # CORS Configuration
+CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5000",
 ]
@@ -94,12 +97,17 @@ WSGI_APPLICATION = 'loan_backend.wsgi.application'
 ASGI_APPLICATION = 'loan_backend.asgi.application'
 
 CHANNEL_LAYERS = {
+    # "default": {
+    #     "BACKEND": "channels_redis.core.RedisChannelLayer",
+    #     "CONFIG": {
+    #         "hosts": [("127.0.0.1", 6379)],
+    #     },
+    # },
+
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-        },
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
+    
 }
 
 

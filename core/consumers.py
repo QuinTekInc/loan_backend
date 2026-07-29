@@ -226,18 +226,45 @@ class DashboardConsumer(AsyncWebsocketConsumer):
 
     def get_student_dashboard_data(self):
 
-        from .models import Student, LoanApplication, Loan, AuditLog
+        from .models import (
+            Student, LoanApplication, 
+            Loan, AuditLog, ApplicationDocument)
+
+        user_logs = AuditLog.objects.filter(user=self.user)
+        logs_map_list = [user_log.toMap() for user_log in user_logs]
+
+        #define response map here.
+        response_map = {
+            'audit_logs': logs_map_list
+        }
+
+
+        stats_map: dict = {}
 
         student = Student.objects.filter(user=self.user)
 
-        loan_applications = (LoanApplication.objects.filter(student=student).order_by('-created_at'))
+        loan_applications = LoanApplication.objects.filter(student=student).order_by('-created_at')
+
+        stats_map['applications_count'] = loan_applications.count()
 
         if loan_applications.exists():
+            application = loan_applications.first()
+            response_map['current_application'] = application.toMap()
             pass 
+
+
+
+        documents = ApplicationDocument.objects.filter(student=student)
+
+        stats_map['total_documents'] = documents.count()
 
         loans = Loan.objects.filter(application__in=loan_applications).order_by('-created_at')
 
+        stats_map['total_loans'] = loans.count()
+
         if loans.exists():
+            loan = loans.first()
+            response_map['current_loan'] = loan.toMap()
             pass 
 
         payments = Loan.objects.filter(loan__in=loans).order_by('-created_at')
@@ -245,10 +272,8 @@ class DashboardConsumer(AsyncWebsocketConsumer):
         if payments.exists():
             pass
 
-        user_logs = AuditLog.objects.filter(user=self.user)
-        logs_map_list = [user_log.toMap() for user_log in user_logs]
-
-        return
+        response_map['dashboard_stat'] = stats_map
+        return response_map
 
     def get_admin_dashboard_data(self):
         from  django.utils import timezone

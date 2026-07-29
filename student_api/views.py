@@ -577,6 +577,36 @@ def getDocuments(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def makePayment(request):
-    return Response()
+
+    loan_id = request.data.get('loan_id')
+    payment_amount = request.data.get('payment_amount')
+    payment_method = request.data.get('payment_method')
+
+    if None in [loan_id, payment_amount, payment_method]:
+        return Response({
+            'message': 'Required fields not be empty'
+        }, status=HTTP_400_BAD_REQUEST)
+
+    
+    student = Student.objects.get(user=request.user)
+
+    try:
+        loan = Loan.objects.get(id=loan_id)
+    except Loan.DoesNotExist:
+        return Response({
+            'message':'Loan object not found'
+        }, status=HTTP_404_NOT_FOUND)
+
+    payment = LoanPayment.objects.create(  
+        loan=loan, 
+        student=student, 
+        amount=payment_amount, 
+        payment_method=payment_method,
+        status='pending'
+    )
+
+    return Response({'message': 'Payment recorded and pending review'})
 

@@ -283,13 +283,20 @@ class Loan(models.Model):
 
 
 class LoanPayment(models.Model):
+
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('cancelled', 'Cancelled')
+    ]
+
     id = models.UUIDField(primary_key=True, unique=True, default=uuid.uuid4)
     loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name="loan_payments")
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='student_payments')
     amount = models.FloatField(default=0) #this is the amount paid by the student
     payment_method = models.TextField(max_length=50)
     notes = models.TextField(default='')
-    status = models.CharField(blank=True, null=False, max_length=255) #whether the payment is pending, failed, or confirmed.
+    status = models.CharField(blank=True, null=False, max_length=255, choices=PAYMENT_STATUS_CHOICES) #whether the payment is pending, failed, or confirmed.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

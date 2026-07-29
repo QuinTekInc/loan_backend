@@ -228,9 +228,22 @@ class DashboardConsumer(AsyncWebsocketConsumer):
 
         from .models import (
             Student, LoanApplication, 
-            Loan, AuditLog, ApplicationDocument)
+            Loan, AuditLog, ApplicationDocument, LoanPayment)
 
-        user_logs = AuditLog.objects.filter(user=self.user)
+        # Find the student instance for the current user
+        student_qs = Student.objects.filter(user=self.user)
+        if not student_qs.exists():
+            return {
+                'dashboard_stat': {},
+                'audit_logs': [],
+                'current_application': None,
+                'current_loan': None,
+            }
+
+        student = student_qs.first()
+
+        # Audit logs where this user was affected (or acted)
+        user_logs = AuditLog.objects.filter(affected_user=self.user).order_by('-created_at')
         logs_map_list = [user_log.toMap() for user_log in user_logs]
 
         #define response map here.
@@ -241,8 +254,6 @@ class DashboardConsumer(AsyncWebsocketConsumer):
 
         stats_map: dict = {}
 
-        student = Student.objects.filter(user=self.user)
-
         loan_applications = LoanApplication.objects.filter(student=student).order_by('-created_at')
 
         stats_map['applications_count'] = loan_applications.count()
@@ -250,27 +261,25 @@ class DashboardConsumer(AsyncWebsocketConsumer):
         if loan_applications.exists():
             application = loan_applications.first()
             response_map['current_application'] = application.toMap()
-            pass 
-
-
 
         documents = ApplicationDocument.objects.filter(student=student)
 
         stats_map['total_documents'] = documents.count()
 
-        loans = Loan.objects.filter(application__in=loan_applications).order_by('-created_at')
+        loans = Loan.objects.filter(student=student).order_by('-created_at')
 
         stats_map['total_loans'] = loans.count()
 
         if loans.exists():
             loan = loans.first()
             response_map['current_loan'] = loan.toMap()
-            pass 
 
-        payments = Loan.objects.filter(loan__in=loans).order_by('-created_at')
+        payments = LoanPayment.objects.filter(loan__in=loans).order_by('-created_at')
 
         if payments.exists():
-            pass
+            # include the most recent payment
+            recent_payment = payments.first()
+            response_map['recent_payment'] = recent_payment.toMap()
 
         response_map['dashboard_stat'] = stats_map
         return response_map
